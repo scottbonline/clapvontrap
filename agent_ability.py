@@ -18,7 +18,12 @@ def ability_check(question):
             where={"sender": subject},
             # where_document={"$contains":"search_string"}
         )
-        return c_results["documents"]
+        raw_results = c_results.get("metadatas") + c_results.get("documents")
+        results = {}
+        for i in range(len(raw_results[1])):
+            results[i] = {"metadata": raw_results[0][i], "message": raw_results[1][i]}
+
+        return results
 
     llm_config = {
         "config_list": config_list,
