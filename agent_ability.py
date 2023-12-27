@@ -108,7 +108,7 @@ def ability_check(question):
 
 if __name__ == "__main__":
     try:
-        answer = ability_check("Is Scott good at video games?")
+        answer = ability_check("Is Scott any good at critical thinking?")
 
     except Exception as e:
         print(e)
