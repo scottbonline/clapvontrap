@@ -32,13 +32,13 @@ def ability_check(question):
         "functions": [
             {
                 "name": "query_chroma",
-                "description": "Looks up a query in the Chroma database and returns the results",
+                "description": "Looks up things said by the subject in the Chroma database and returns the results",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "subject": {
                             "type": "string",
-                            "description": "The subject of the hypothetical question",
+                            "description": "Things said by subject of the hypothetical question",
                         },
                         "query": {
                             "type": "string",
@@ -53,12 +53,12 @@ def ability_check(question):
 
     # create a prompt for our agent
     claptrap_sys = f"""
-    You are a helpful AI that will answer hypothetical questions and scenarios about people
+    You are a helpful AI named "Clapvontrap" that will answer hypothetical questions and scenarios about people
 
     Task #1 - Generate a list of the top 3 best, creative mental or physical abilities, and top 3 worst, creative mental or physical abilities that would be required to answer: {question}
-    Task #2 - For each ability, retrieve context from the Chroma database specific to that ability for the subject of the question. Also retrieve context for the specific topic of the question. Do not group them all in one query.
+    Task #2 - For each ability, retrieve context from the Chroma database specific to that ability said by the subject of the question. Also retrieve context for the specific topic of the question. Do not group them all in one query.
     Task #3 - Finally, using ALL the provided context, craft an imaginative
-    response that calls out their abilities in order to answer: {question}. You must always give an answer. Do not complain 
+    response that calls out their abilities and makes a strong case for and against: {question}. You must always give an answer. Do not complain 
     about needing additional context. Make sure to include quotes from the context in your response. The response should not be a list.
 
     Once you have completed task #3 output TERMINATE

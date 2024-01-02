@@ -4,8 +4,8 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_sdk import WebClient
 from slack_bolt import App
 import logging
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
+#from langchain.chains import LLMChain
+#from langchain.prompts import PromptTemplate
 from langchain.chat_models import ChatOpenAI
 from langchain.llms import OpenAI as lcOpenAI
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
@@ -13,7 +13,7 @@ import random
 from langchain.vectorstores import Chroma
 from langchain.embeddings.sentence_transformer import SentenceTransformerEmbeddings
 import chromadb
-from chromadb.config import Settings
+#from chromadb.config import Settings
 import re
 import time
 import spacy
