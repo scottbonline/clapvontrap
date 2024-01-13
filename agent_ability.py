@@ -5,7 +5,7 @@ import chromadb
 
 def ability_check(question):
     OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-    chroma_client = chromadb.HttpClient(host="localhost", port=8000)
+    chroma_client = chromadb.HttpClient(host="localhost", port=8001)
     collection = chroma_client.get_or_create_collection(name="10word")
 
     config_list = [{"model": "gpt-4-1106-preview", "api_key": OPENAI_API_KEY}]
