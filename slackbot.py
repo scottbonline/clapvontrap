@@ -28,6 +28,7 @@ logging.basicConfig(
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
 MACBOOK_IP = '192.168.1.182'
+os.environ['OLLAMA_HOST'] = MACBOOK_IP
 
 # openai auth token is pulled from system env OPENAI_API_KEY
 
