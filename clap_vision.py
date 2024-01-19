@@ -18,8 +18,9 @@ ollama_chat = Ollama(
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 # Prepare headers and data
 
+
 def download_image(url, filepath):
-    response = requests.get(url, stream=True, headers={f"'Authorization':'Bearer {SLACK_BOT_TOKEN}'"}
+    response = requests.get(url, stream=True, headers={'Authorization':'Bearer ' + SLACK_BOT_TOKEN})
     if response.status_code == 200:
         with open(filepath, 'wb') as image_file:
             for chunk in response.iter_content(1024):
@@ -53,6 +54,7 @@ def vision(url, query):
     }
 
     # Make the POST request
+    logging.info("Sending image request to Ollama")
     response = requests.post(url, headers=headers, data=json.dumps(data))
     str_response = response.content.decode('utf-8')
     list_response = str_response.split('\n')
