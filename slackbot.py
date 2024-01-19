@@ -4,25 +4,21 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_sdk import WebClient
 from slack_bolt import App
 import logging
-#from langchain.chains import LLMChain
-#from langchain.prompts import PromptTemplate
-from langchain.chat_models import ChatOpenAI
-from langchain.llms import OpenAI as lcOpenAI
-from langchain.llms import Ollama
+from langchain_community.chat_models import ChatOpenAI
+from langchain_community.llms import Ollama
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 import random
-from langchain.vectorstores import Chroma
 from langchain.embeddings.sentence_transformer import SentenceTransformerEmbeddings
 import chromadb
-#from chromadb.config import Settings
 import re
 import time
 import spacy
 import json
 from agent_ability import ability_check
-from clap_utils import clap_usermap, slack_msg_parser
+from clap_utils import clap_usermap, slack_msg_parser, get_subject, valid_users
 from datetime import datetime
 from clap_vision import vision
+from clap_memory import mem_client, mem_query
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,10 +37,12 @@ chat = ChatOpenAI(
 )
 
 ollama_chat = Ollama(
-    model="dolphin-mixtral-q8"
+    model="clap-mix:latest"
 )
 
 openai_client = OpenAI()
+
+memgpt_client = mem_client()
 
 # init Chroma
 chroma_client = chromadb.HttpClient(host="localhost", port=8001)
@@ -60,12 +58,13 @@ help_message = """
 Default Behaviors (local:dolphin-mixtral:8x7b-v2.6-q8_0 Uncensored):
 - Attempts to answer your question. ie: @clapvontrap What is the meaning of life?
 - Attempts to answer with context about the subject. ie: @clapvontrap Has Scott ever played Sonic the Hedgehog
+- **NEW** Any uploaded images can be analyzed. No need to @clap, just upload and ask a question. Uses local:llava:13b-v1.5-fp16
 
 Optional:
 /a - Ability Assessement (remote:ChatGPT 4 Turbo) - ie: @clapvontrap /a Would Scott make a good president
+/m - Chat with memory
 /g - Grudge Timer - ie: @clapvontrap /g
 /i - Image Creation (remote:Dall-e-3)- ie: @clapvontrap /i a cat wearing a hat
-/v - Use Llava Vision to analyze images (local:llava:13b-v1.5-fp16) - ie: @clapvontrap /v tell me about this picture <upload image via slack>
 /? - Displays this help message - ie: @clapvontrap /?
 """
 
@@ -107,16 +106,6 @@ messages = [
 messages_generic = [
     SystemMessage(content=generic_ai),
 ]
-
-def valid_users():
-    file_path = "usermap.json"
-    with open(file_path, "r") as file:
-        data = json.load(file)
-        values_list = list(data.values())
-        values_list = [name.lower() for name in values_list]
-
-    return values_list
-
 
 def query_chroma(query, subject=None):
     logging.info(f"Query: {query}, Sender: {subject}")
@@ -196,7 +185,6 @@ def get_subject(query):
     logging.info("Start Subject Detection")
     # Load the English model
     nlp = spacy.load("en_core_web_sm")
-
     # Process the sentence
     doc = nlp(query)
     # generate valid users
@@ -221,17 +209,12 @@ def chat_response(context_from_user, llm=None):
 
     subject = get_subject(context_from_user)
 
-    #if not subject:
-    #    prompt = f"Question: {context_from_user}"
-    #    logging.info(f"Sending finalized Ollama prompt:: {prompt}")
-    #    ai_response = ollama_chat(context_from_user)
-    #else:
     if llm == "ollama":
         #chroma_context = query_chroma(context_from_user, subject)
         #prompt = f"Question: {context_from_user} Context: {chroma_context}"
         if subject:
-            context = query_chroma(context_from_user)
-            prompt = context_from_user + str(context)
+            context = query_chroma(context_from_user, subject)
+            prompt = f"{default_ai}\n Context: {str(context)} Question: {context_from_user}"
         else:
             prompt = context_from_user
 
@@ -253,27 +236,13 @@ def chat_response(context_from_user, llm=None):
 # This gets activated when the bot is tagged in a channel
 @app.event("app_mention")
 def handle_message_events(body):
-
-    context_from_user = str(body["event"]["text"]).split("> ")[1]
-
-    # Let thre user know that we are busy with the request
-    response = client.chat_postMessage(
-        channel=body["event"]["channel"],
-        text=f"beep, boop: " + context_from_user,
-    )
-    logging.info(f"Message sent by:: {body['event']['user']}")
-    logging.info(f"Check Query for Image Request:: {context_from_user}")
-
-    if context_from_user.startswith("/i"):
-        logging.info("Image Search Detected")
-        ai_response = image_create(context_from_user)
-
-        response = client.chat_postMessage(
-            channel=body["event"]["channel"],
-            # thread_ts=body["event"]["event_ts"],
-            text=ai_response.data[0].model_dump()["url"],
-        )
-    elif body["event"]["user"] == clap_usermap(name='Matt')[1] or context_from_user.startswith("/g"):
+    logging.info("send message to parser")
+    sentby, text, image_url, link_url, bot = slack_msg_parser(body)
+    #print(body)
+    
+    logging.info("Check for /g")
+    if text != None:
+        if text.startswith("/g"):
             logging.info("Grudge Detected")
             # calculate how many days, hours, minutes, and seconds until the grudge is over
             now = datetime.now()
@@ -286,36 +255,79 @@ def handle_message_events(body):
             # send the message
             response = client.chat_postMessage(
                 channel=body["event"]["channel"],
-                # thread_ts=body["event"]["event_ts"],
                 text=f"{days} days, {hours} hours, {minutes} minutes, {seconds} seconds remaining...",
             )
-    elif context_from_user.startswith("/a"):
-        logging.info("BETA Ability Detected")
-        ai_response = ability_check(context_from_user)
-
-        response = client.chat_postMessage(
-            channel=body["event"]["channel"],
-            text=ai_response,
-        )
-    elif context_from_user.startswith("/?"):
-        logging.info("Help Request Detected")
-        response = client.chat_postMessage(
-            channel=body["event"]["channel"],
-            text=help_message,
-        )
-    elif context_from_user.startswith("/v"):
+            return
+    logging.info("Check for /m")
+    if text != None:
+        if text.startswith("/m") and sentby == "Ryan":
+            logging.info("BETA - Ryan Memory Detected")
+            ai_response = mem_query(memgpt_client, "clap_ryan", text[3:], sentby)
+            response = client.chat_postMessage(
+                channel=body["event"]["channel"],
+                text=ai_response,
+            )
+            return
+        elif text.startswith("/m") and sentby == "Scott":
+            logging.info("BETA - Scott Memory Detected")
+            ai_response = mem_query(memgpt_client, "clap_scott", text[3:], sentby)
+            response = client.chat_postMessage(
+                channel=body["event"]["channel"],
+                text=ai_response,
+            )
+            return
+        elif text.startswith("/m"):
+            logging.info("BETA - Generic Memory Detected")
+            ai_response = mem_query(memgpt_client, "Clapvontrapp", text[3:])
+            response = client.chat_postMessage(
+                channel=body["event"]["channel"],
+                text=ai_response,
+            )
+            return
+    logging.info("Check for /i")
+    if text != None:
+        if text.startswith("/i"):
+            logging.info("Image Search Detected")
+            ai_response = image_create(text[3:])
+            response = client.chat_postMessage(
+                channel=body["event"]["channel"],
+                text=ai_response.data[0].model_dump()["url"],
+            )   
+            return
+    logging.info("Check for /a")
+    if text != None:
+        if text.startswith("/a"):
+            logging.info("BETA Ability Detected")
+            ai_response = ability_check(text)
+            response = client.chat_postMessage(
+                channel=body["event"]["channel"],
+                text=ai_response,
+            )
+            return
+    logging.info("Check for /?")
+    if text != None:
+        if text.startswith("/?"):
+            logging.info("Help Request Detected")
+            response = client.chat_postMessage(
+                channel=body["event"]["channel"],
+                text=help_message,
+            )
+            return
+    logging.info("Check for image_url")
+    if image_url != None:
         logging.info("llava vision detected")
-        # remove the /v from the query
-        context_from_user = context_from_user[3:]
-        url = body["event"]["files"][0]["url_private_download"]
-        ai_response = vision(url ,context_from_user)
+        if text == None:
+            text = "What in this image can kill you? If nothing, just give a one line description of what you see"
+            logging.info("No query detected, adding default query")
+        ai_response = vision(image_url ,text)
         response = client.chat_postMessage(
             channel=body["event"]["channel"],
             text=ai_response,
         )
-    else:
+        return
+    if text != None:
         logging.info("Normal Query Detected")
-        ai_response = chat_response(context_from_user, llm="ollama")
+        ai_response = chat_response(text, llm="ollama")
         logging.info(f'{ai_response}')
         response = client.chat_postMessage(
             channel=body["event"]["channel"],
@@ -328,43 +340,55 @@ def handle_message_events(body):
 # this listens to all messages in all channels
 @app.event("message")
 def handle_message_events(body, logger):
-    if "text" in body["event"]:
-        context_from_user = str(body["event"]["text"])
-        chance = random.randint(1, 50)
-        length = len(context_from_user)
-        logging.info(
-            f"Random response check:: Context: {context_from_user}, Chance:{chance}, Length:{length}"
+    logging.info("Send message to parser")
+    sentby, text, image_url, link_url, bot = slack_msg_parser(body)
+
+    if bot:
+        logging.info("Bot detected, ignoring")
+        return
+
+    if sentby == 'Matt':
+        logging.info("Grudge Detected")
+        response = client.chat_postMessage(
+        channel=body["event"]["channel"],
+        text="hello Matthew....",
         )
-        if body["event"]["user"] == clap_usermap(name='Matt')[1]:
-            logging.info("Grudge Detected")
-
-            ai_response = image_create("creepy girl with a grudge against the world")
-            response = client.chat_postMessage(
-                channel=body["event"]["channel"],
-                # thread_ts=body["event"]["event_ts"],
-                text="hello Matthew....",
-            )
-            response = client.chat_postMessage(
-                channel=body["event"]["channel"],
-                # thread_ts=body["event"]["event_ts"],
-                text=ai_response.data[0].model_dump()["url"],
-            )
-        elif (
-            chance > 40
-            and length > 10
-            and context_from_user[-1] == "?"
-            and "U04PUPJ04R0" not in context_from_user
-        ):
-            logging.info("Random response activated")
-            ai_response = chat_response(context_from_user)
-
-            response = client.chat_postMessage(
-                channel=body["event"]["channel"],
-                # thread_ts=body["event"]["event_ts"],
-                text=ai_response.content,
-            )
-    else:
-        logger.info(f"No 'text' key found:: {body}")
+        ai_response = image_create("creepy girl with a grudge against the world")
+        response = client.chat_postMessage(
+            channel=body["event"]["channel"],
+            text=ai_response.data[0].model_dump()["url"],
+        )
+        return
+    if image_url != None:
+        logging.info("llava vision detected")
+        if text == None:
+            text = "Is there anything that could kill you in this image? If not, just say something short and nice about it"
+            logging.info("No query detected, adding default query")
+        ai_response = vision(image_url ,text)
+        response = client.chat_postMessage(
+            channel=body["event"]["channel"],
+            text=ai_response,
+        )
+        return
+    chance = random.randint(1, 50)
+    try:
+        length = len(text)
+    except:
+        length = 0
+        logging.info("set length manually to zero JANK")
+    logging.info(f"Random Response Check:: Chance: {chance}, Length: {length}")
+    if (
+        chance > 40
+        and length > 10
+        and text[-1] == "?"
+        and sentby != "U04PUPJ04R0"
+    ):
+        logging.info("Random response activated")
+        ai_response = chat_response(text)
+        response = client.chat_postMessage(
+            channel=body["event"]["channel"],
+            text=ai_response.content,
+        )
 
 if __name__ == "__main__":
     try:
