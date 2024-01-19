@@ -37,7 +37,8 @@ chat = ChatOpenAI(
 )
 
 ollama_chat = Ollama(
-    model="clap-mix:latest"
+    model="clap:2.7",
+    base_url="http://localhost:11434",
 )
 
 openai_client = OpenAI()
