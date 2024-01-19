@@ -27,6 +27,8 @@ logging.basicConfig(
 
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
+MACBOOK_IP = '192.168.1.182'
+
 # openai auth token is pulled from system env OPENAI_API_KEY
 
 # llms inits
@@ -38,7 +40,7 @@ chat = ChatOpenAI(
 
 ollama_chat = Ollama(
     model="clap:2.7",
-    base_url="http://localhost:11434",
+    base_url=f"http://{MACBOOK_IP}:11434",
 )
 
 openai_client = OpenAI()
@@ -46,7 +48,7 @@ openai_client = OpenAI()
 memgpt_client = mem_client()
 
 # init Chroma
-chroma_client = chromadb.HttpClient(host="localhost", port=8001)
+chroma_client = chromadb.HttpClient(host=MACBOOK_IP, port=8001)
 # chroma_collection = chroma_client.get_or_create_collection("20char")
 chroma_collection = chroma_client.get_collection("10word")
 
