@@ -14,6 +14,7 @@ def mem_client():
         auto_save=True,
         config={
             "model": "clap-mix:latest",
+            "model_endpoint": "http://192.168.1.182:11434",
         #    "agent": agent_name,
         }
     )
