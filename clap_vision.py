@@ -15,11 +15,11 @@ logging.basicConfig(
 ollama_chat = Ollama(
     model="llava:13b-v1.5-fp16",
 )
-
+SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 # Prepare headers and data
 
 def download_image(url, filepath):
-    response = requests.get(url, stream=True, headers={'Authorization':'Bearer xoxb-80968956049-4810800004850-8JTSCFIupHSxWG1DThbS9mZZ'})
+    response = requests.get(url, stream=True, headers={f"'Authorization':'Bearer {SLACK_BOT_TOKEN}'"}
     if response.status_code == 200:
         with open(filepath, 'wb') as image_file:
             for chunk in response.iter_content(1024):
