@@ -19,6 +19,7 @@ from clap_utils import clap_usermap, slack_msg_parser, get_subject, valid_users
 from datetime import datetime
 from clap_vision import vision
 from clap_memory import mem_client, mem_query
+from clap_history import ollama_chat
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,6 +30,7 @@ SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
 MACBOOK_IP = '192.168.1.182'
 os.environ['OLLAMA_HOST'] = MACBOOK_IP
+os.environ['ANONYMIZED_TELEMETRY'] = 'FALSE'
 
 # openai auth token is pulled from system env OPENAI_API_KEY
 
@@ -39,8 +41,8 @@ chat = ChatOpenAI(
     model="gpt-4-1106-preview"
 )
 
-ollama_chat = Ollama(
-    model="clap:2.7",
+ollama_chat_lc = Ollama(
+    model="clap:2.7_q5_K_M",
     base_url=f"http://{MACBOOK_IP}:11434",
 )
 
@@ -62,11 +64,11 @@ help_message = """
 Default Behaviors (local:dolphin-mixtral:8x7b-v2.6-q8_0 Uncensored):
 - Attempts to answer your question. ie: @clapvontrap What is the meaning of life?
 - Attempts to answer with context about the subject. ie: @clapvontrap Has Scott ever played Sonic the Hedgehog
-- **NEW** Any uploaded images can be analyzed. No need to @clap, just upload and ask a question. Uses local:llava:13b-v1.5-fp16
+- Any uploaded images can be analyzed. No need to @clap, just upload and ask a question. Uses local:llava:13b-v1.5-fp16
+- **NEW** Regular queries to clap will utilize short term memory automatically
 
 Optional:
 /a - Ability Assessement (remote:ChatGPT 4 Turbo) - ie: @clapvontrap /a Would Scott make a good president
-/m - Chat with memory
 /g - Grudge Timer - ie: @clapvontrap /g
 /i - Image Creation (remote:Dall-e-3)- ie: @clapvontrap /i a cat wearing a hat
 /? - Displays this help message - ie: @clapvontrap /?
@@ -205,7 +207,7 @@ def get_subject(query):
     return None
 
 
-def chat_response(context_from_user, llm=None):
+def chat_response(context_from_user, sentby, llm=None):
     # formatting to help with NLP
     if not context_from_user[0].isupper():
         context_from_user = context_from_user[0].upper() + context_from_user[1:]
@@ -223,7 +225,7 @@ def chat_response(context_from_user, llm=None):
             prompt = context_from_user
 
         logging.info(f"Sending finalized Ollama prompt:: {prompt}")
-        ai_response = ollama_chat(prompt)
+        ai_response = ollama_chat(prompt, sentby)
         logging.info(f"Received Ollama response: {ai_response}")
         return ai_response
     else:
@@ -331,7 +333,7 @@ def handle_message_events(body):
         return
     if text != None:
         logging.info("Normal Query Detected")
-        ai_response = chat_response(text, llm="ollama")
+        ai_response = chat_response(text, sentby, llm="ollama")
         logging.info(f'{ai_response}')
         response = client.chat_postMessage(
             channel=body["event"]["channel"],
